@@ -50,7 +50,7 @@
         .btn-primary { background-color: #007bff; color: white; }
         .btn-secondary { background-color: #6c757d; color: white; display: none; }
         .btn-danger { background-color: #dc3545; color: white; width: auto; padding: 8px 15px; font-size: 14px; border-radius: 4px; }
-        .btn-success { background-color: #2ecc71; color: white; width: auto; } /* 結算按鈕專用 */
+        .btn-success { background-color: #2ecc71; color: white; width: auto; }
         
         .grid-layout { display: grid; grid-template-columns: repeat(1, 1fr); gap: 20px; }
         @media (min-width: 800px) { .grid-layout { grid-template-columns: repeat(2, 1fr); } }
@@ -82,7 +82,7 @@
         .btn-plus { background-color: #2ecc71; }
         .sales-count { font-size: 18px; font-weight: bold; }
 
-        /* [新增] 行事曆專屬樣式 */
+        /* 行事曆專屬樣式 */
         .calendar-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; background-color: #ddd; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; }
         .calendar-header-cell { background-color: #34495e; color: white; text-align: center; padding: 10px 0; font-weight: bold; }
@@ -91,12 +91,13 @@
         .calendar-cell.empty { background-color: #f9f9f9; cursor: default; }
         .calendar-cell.today { outline: 2px solid #e74c3c; outline-offset: -2px; }
         .cal-date { font-weight: bold; margin-bottom: 5px; color: #555; }
-        .cal-revenue { font-size: 14px; color: #e74c3c; font-weight: bold; margin-top: auto; }
-        .cal-profit { font-size: 12px; color: #2ecc71; }
+        
+        /* [修改] 調整淨利的樣式，作為主要視覺焦點 */
+        .cal-profit { font-size: 14px; color: #2ecc71; font-weight: bold; margin-top: auto; }
         @media (max-width: 768px) {
             .calendar-cell { min-height: 80px; padding: 5px; }
-            .cal-revenue { font-size: 12px; }
-            .cal-profit { display: none; /* 手機版空間有限，隱藏利潤字樣，點擊後再看 */ }
+            /* [修改] 確保手機版也會顯示淨利，移除原先的 display: none */
+            .cal-profit { font-size: 12px; display: block; }
         }
     </style>
 </head>
@@ -115,7 +116,6 @@
 
     <div id="viewSales" class="view-section active container">
         <h2>
-            商品列表與結算
             <button class="btn btn-success" id="btnCheckout">本日結算寫入報表</button>
         </h2>
         
@@ -194,17 +194,12 @@
 </main>
 
 <script>
-/**
- * 遵守單一職責原則 (SRP)
- * 類別 1: DatabaseRepository - 處理 IndexedDB 本地資料庫邏輯
- */
 class DatabaseRepository {
     constructor() {
         this.databaseName = 'VanillaClothingDB';
-        // [修改] 提升資料庫版本至 2，觸發結構升級
         this.databaseVersion = 2; 
         this.storeItems = 'ClothingItems';
-        this.storeRecords = 'DailyRecords'; // [新增] 新資料表
+        this.storeRecords = 'DailyRecords';
     }
 
     openDatabase() {
@@ -215,11 +210,9 @@ class DatabaseRepository {
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                // 原有的商品表
                 if (!db.objectStoreNames.contains(this.storeItems)) {
                     db.createObjectStore(this.storeItems, { keyPath: 'clothingId' });
                 }
-                // [新增] 建立每日結算紀錄表，主鍵為日期字串 (例如: '2026-03-02')
                 if (!db.objectStoreNames.contains(this.storeRecords)) {
                     db.createObjectStore(this.storeRecords, { keyPath: 'dateString' });
                 }
@@ -227,7 +220,6 @@ class DatabaseRepository {
         });
     }
 
-    // --- 商品表 (ClothingItems) 操作 ---
     async createItem(item) {
         const db = await this.openDatabase();
         return new Promise((resolve, reject) => {
@@ -272,7 +264,6 @@ class DatabaseRepository {
         });
     }
 
-    // --- [新增] 每日結算表 (DailyRecords) 操作 ---
     async getDailyRecord(dateString) {
         const db = await this.openDatabase();
         return new Promise((resolve, reject) => {
@@ -289,7 +280,7 @@ class DatabaseRepository {
         return new Promise((resolve, reject) => {
             const transaction = db.transaction([this.storeRecords], 'readwrite');
             const store = transaction.objectStore(this.storeRecords);
-            const request = store.put(record); // put：有則覆蓋，無則新增
+            const request = store.put(record); 
             request.onsuccess = () => resolve();
             request.onerror = () => reject('儲存結算紀錄失敗');
         });
@@ -307,24 +298,18 @@ class DatabaseRepository {
     }
 }
 
-/**
- * 遵守單一職責原則 (SRP)
- * 類別 2: UIController - 專職處理 DOM 操作與使用者互動
- */
 class UIController {
     constructor(databaseRepository) {
         this.repository = databaseRepository;
         this.currentBase64Image = '';
         this.editingItemId = null;
         this.currentItemsList = []; 
-        this.dailyRecordsList = []; // 暫存歷史紀錄
+        this.dailyRecordsList = [];
 
-        // 行事曆狀態
         const now = new Date();
         this.currentCalendarYear = now.getFullYear();
-        this.currentCalendarMonth = now.getMonth(); // 0-11
+        this.currentCalendarMonth = now.getMonth(); 
 
-        // 綁定 DOM
         this.formTitle = document.getElementById('formTitle');
         this.inputName = document.getElementById('clothingName');
         this.inputFile = document.getElementById('imageInput');
@@ -335,7 +320,7 @@ class UIController {
 
         this.btnSave = document.getElementById('btnSave');
         this.btnCancel = document.getElementById('btnCancel');
-        this.btnCheckout = document.getElementById('btnCheckout'); // [新增]
+        this.btnCheckout = document.getElementById('btnCheckout');
         
         this.previewContainer = document.getElementById('previewContainer');
         this.imagePreview = document.getElementById('imagePreview');
@@ -347,7 +332,6 @@ class UIController {
         this.salesList = document.getElementById('salesList');
         this.salesSummary = document.getElementById('salesSummary'); 
 
-        // [新增] 行事曆 DOM
         this.calendarGrid = document.getElementById('calendarGrid');
         this.calendarMonthLabel = document.getElementById('calendarMonthLabel');
         document.getElementById('btnPrevMonth').addEventListener('click', () => this.changeMonth(-1));
@@ -367,7 +351,6 @@ class UIController {
                 e.target.classList.add('active');
                 document.getElementById(targetViewId).classList.add('active');
 
-                // 若切換到統計頁面，確保載入最新資料並重新繪製
                 if (targetViewId === 'viewStatistics') {
                     this.loadAndRenderCalendar();
                 }
@@ -393,12 +376,10 @@ class UIController {
 
         this.btnSave.addEventListener('click', () => this.handleSave());
         this.btnCancel.addEventListener('click', () => this.clearForm());
-        this.btnCheckout.addEventListener('click', () => this.handleCheckout()); // [新增] 綁定結算
+        this.btnCheckout.addEventListener('click', () => this.handleCheckout());
     }
 
-    // --- [新增] 結算核心邏輯 ---
     async handleCheckout() {
-        // 1. 篩選出今天有賣出的商品
         const soldItems = this.currentItemsList.filter(item => (item.soldQuantity || 0) > 0);
         
         if (soldItems.length === 0) {
@@ -417,7 +398,6 @@ class UIController {
 
         if (!result.isConfirmed) return;
 
-        // 2. 計算總額並準備明細資料
         let dailyRevenue = 0;
         let dailyProfit = 0;
         const details = [];
@@ -439,18 +419,15 @@ class UIController {
             });
         }
 
-        // 3. 取得今日日期字串 (YYYY-MM-DD)
         const today = new Date();
         const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
         try {
-            // 4. 防呆：檢查今天是否已經結算過，若有則累加上去
             let existingRecord = await this.repository.getDailyRecord(dateString);
             
             if (existingRecord) {
                 existingRecord.totalRevenue += dailyRevenue;
                 existingRecord.totalProfit += dailyProfit;
-                // 將新的明細附加進去 (實務上可以進一步合併同品項，這裡簡單處理為附加陣列)
                 existingRecord.details = existingRecord.details.concat(details);
             } else {
                 existingRecord = {
@@ -461,10 +438,8 @@ class UIController {
                 };
             }
 
-            // 5. 寫入結算表
             await this.repository.saveDailyRecord(existingRecord);
 
-            // 6. 更新商品表：將所有商品的 soldQuantity 歸零
             for (const item of soldItems) {
                 item.soldQuantity = 0;
                 await this.repository.updateItem(item);
@@ -472,7 +447,6 @@ class UIController {
 
             Swal.fire({ icon: 'success', title: '結算完成', text: '資料已成功寫入報表。' });
             
-            // 7. 重新載入畫面
             await this.loadAndRenderItems();
 
         } catch (error) {
@@ -480,7 +454,6 @@ class UIController {
         }
     }
 
-    // --- [新增] 行事曆核心邏輯 ---
     changeMonth(offset) {
         this.currentCalendarMonth += offset;
         if (this.currentCalendarMonth < 0) {
@@ -506,7 +479,6 @@ class UIController {
         this.calendarMonthLabel.textContent = `${this.currentCalendarYear} 年 ${this.currentCalendarMonth + 1} 月`;
         this.calendarGrid.innerHTML = '';
 
-        // 渲染星期標頭
         const daysOfWeek = ['日', '一', '二', '三', '四', '五', '六'];
         daysOfWeek.forEach(day => {
             const header = document.createElement('div');
@@ -515,21 +487,17 @@ class UIController {
             this.calendarGrid.appendChild(header);
         });
 
-        // 計算這個月的第一天是星期幾，以及這個月有幾天
         const firstDay = new Date(this.currentCalendarYear, this.currentCalendarMonth, 1).getDay();
         const daysInMonth = new Date(this.currentCalendarYear, this.currentCalendarMonth + 1, 0).getDate();
 
-        // 取得今天的日期字串，用來標示「今天」
         const todayStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
 
-        // 填補第一週前面的空白天數
         for (let i = 0; i < firstDay; i++) {
             const emptyCell = document.createElement('div');
             emptyCell.className = 'calendar-cell empty';
             this.calendarGrid.appendChild(emptyCell);
         }
 
-        // 渲染每一天
         for (let day = 1; day <= daysInMonth; day++) {
             const cellDateString = `${this.currentCalendarYear}-${String(this.currentCalendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             
@@ -539,16 +507,12 @@ class UIController {
                 cell.classList.add('today');
             }
 
-            // 尋找這一天是否有結算紀錄
             const record = this.dailyRecordsList.find(r => r.dateString === cellDateString);
 
             let innerHTML = `<div class="cal-date">${day}</div>`;
             if (record) {
-                innerHTML += `
-                    <div class="cal-revenue">$ ${record.totalRevenue.toLocaleString()}</div>
-                    <div class="cal-profit">利: $ ${record.totalProfit.toLocaleString()}</div>
-                `;
-                // 綁定點擊事件顯示明細
+                // [修改] 只顯示淨利，並修正原本 HTML 標籤破損的問題
+                innerHTML += `<div class="cal-profit">淨利: $${record.totalProfit.toLocaleString()}</div>`;
                 cell.onclick = () => this.showDailyDetails(record);
             }
 
@@ -558,24 +522,24 @@ class UIController {
     }
 
     showDailyDetails(record) {
-        // 利用 SweetAlert 顯示該日的詳細銷售清單
         let detailHtml = `<ul style="text-align: left; max-height: 300px; overflow-y: auto;">`;
         
-        // 合併同品項數量 (防止一天結算兩次造成同品項分開顯示)
         const mergedDetails = {};
         record.details.forEach(d => {
             if (!mergedDetails[d.clothingId]) {
-                mergedDetails[d.clothingId] = { name: d.clothingName, qty: 0, rev: 0 };
+                // [修正] 新增 profit 欄位，確保多次結算時可以正確累加該品項淨利
+                mergedDetails[d.clothingId] = { name: d.clothingName, qty: 0, rev: 0, profit: 0 };
             }
             mergedDetails[d.clothingId].qty += d.quantity;
             mergedDetails[d.clothingId].rev += d.revenue;
+            mergedDetails[d.clothingId].profit += d.profit; // [修正] 累加淨利
         });
 
         for (const key in mergedDetails) {
             const d = mergedDetails[key];
             detailHtml += `<li style="margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 5px;">
                 <strong>${this.escapeHTML(d.name)}</strong><br>
-                售出: ${d.qty} 件 | 額: $${d.rev.toLocaleString()}
+                售出: ${d.qty} 件 | 銷售額: $${d.rev.toLocaleString()} | 淨利: <span style="color: #2ecc71; font-weight: bold;">$${d.profit.toLocaleString()}</span>
             </li>`;
         }
         detailHtml += `</ul>`;
@@ -587,7 +551,6 @@ class UIController {
         });
     }
 
-    // --- 共用與其他邏輯 (與先前一致，省略註解以精簡篇幅) ---
     compressImage(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
