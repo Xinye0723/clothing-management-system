@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>服飾銷售管理系統 (純前端版)</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.min.js"></script>
     <style>
         body { font-family: sans-serif; background-color: #f4f7f6; margin: 0; color: #333; display: flex; height: 100vh; overflow: hidden; }
         
@@ -90,14 +91,19 @@
         .calendar-cell:hover { background-color: #f1f8ff; }
         .calendar-cell.empty { background-color: #f9f9f9; cursor: default; }
         .calendar-cell.today { outline: 2px solid #e74c3c; outline-offset: -2px; }
-        .cal-date { font-weight: bold; margin-bottom: 5px; color: #555; }
         
-        /* [修改] 調整淨利的樣式，作為主要視覺焦點 */
+        /* [修改] 讓日期與農曆標籤能在同一行左右對齊 */
+        .cal-date { font-weight: bold; margin-bottom: 5px; color: #555; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* [新增] 農曆標示徽章樣式 */
+        .lunar-badge { font-size: 12px; background-color: #e67e22; color: white; padding: 2px 6px; border-radius: 12px; font-weight: normal; }
+
         .cal-profit { font-size: 14px; color: #2ecc71; font-weight: bold; margin-top: auto; }
         @media (max-width: 768px) {
             .calendar-cell { min-height: 80px; padding: 5px; }
-            /* [修改] 確保手機版也會顯示淨利，移除原先的 display: none */
             .cal-profit { font-size: 12px; display: block; }
+            /* [新增] 手機版稍微縮小徽章避免擠壓 */
+            .lunar-badge { font-size: 10px; padding: 1px 4px; }
         }
     </style>
 </head>
@@ -293,7 +299,7 @@ class DatabaseRepository {
             const store = transaction.objectStore(this.storeRecords);
             const request = store.getAll();
             request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject('讀取歷史紀錄失敗');
+            request.onerror = () => reject('讀取歷史紀錄失败');
         });
     }
 }
@@ -507,11 +513,28 @@ class UIController {
                 cell.classList.add('today');
             }
 
+            // [新增] 計算農曆是否為十七
+            let isLunar17 = false;
+            try {
+                // Solar.fromYmd 的月份從 1 開始計算
+                const solar = Solar.fromYmd(this.currentCalendarYear, this.currentCalendarMonth + 1, day);
+                const lunar = solar.getLunar();
+                if (lunar.getDay() === 17) {
+                    isLunar17 = true;
+                }
+            } catch (error) {
+                console.error('農曆轉換發生錯誤:', error);
+            }
+
             const record = this.dailyRecordsList.find(r => r.dateString === cellDateString);
 
-            let innerHTML = `<div class="cal-date">${day}</div>`;
+            // [修改] 動態組合 HTML，若為農曆十七則加入橘色徽章標示
+            let innerHTML = `<div class="cal-date">
+                                <span>${day}</span>
+                                ${isLunar17 ? '<span class="lunar-badge">農曆十七</span>' : ''}
+                             </div>`;
+            
             if (record) {
-                // [修改] 只顯示淨利，並修正原本 HTML 標籤破損的問題
                 innerHTML += `<div class="cal-profit">淨利: $${record.totalProfit.toLocaleString()}</div>`;
                 cell.onclick = () => this.showDailyDetails(record);
             }
@@ -527,12 +550,11 @@ class UIController {
         const mergedDetails = {};
         record.details.forEach(d => {
             if (!mergedDetails[d.clothingId]) {
-                // [修正] 新增 profit 欄位，確保多次結算時可以正確累加該品項淨利
                 mergedDetails[d.clothingId] = { name: d.clothingName, qty: 0, rev: 0, profit: 0 };
             }
             mergedDetails[d.clothingId].qty += d.quantity;
             mergedDetails[d.clothingId].rev += d.revenue;
-            mergedDetails[d.clothingId].profit += d.profit; // [修正] 累加淨利
+            mergedDetails[d.clothingId].profit += d.profit; 
         });
 
         for (const key in mergedDetails) {
