@@ -92,18 +92,17 @@
         .calendar-cell.empty { background-color: #f9f9f9; cursor: default; }
         .calendar-cell.today { outline: 2px solid #e74c3c; outline-offset: -2px; }
         
-        /* [修改] 讓日期與農曆標籤能在同一行左右對齊 */
-        .cal-date { font-weight: bold; margin-bottom: 5px; color: #555; display: flex; justify-content: space-between; align-items: center; }
+        /* [修改] 修正 RWD 擠壓問題：取消 flex，並強制徽章不換行 */
+        .cal-date { font-weight: bold; margin-bottom: 5px; color: #555; text-align: left; }
+        .lunar-badge { display: inline-block; font-size: 12px; background-color: #e67e22; color: white; padding: 2px 6px; border-radius: 12px; font-weight: normal; white-space: nowrap; margin-left: 5px; vertical-align: text-top; }
         
-        /* [新增] 農曆標示徽章樣式 */
-        .lunar-badge { font-size: 12px; background-color: #e67e22; color: white; padding: 2px 6px; border-radius: 12px; font-weight: normal; }
-
         .cal-profit { font-size: 14px; color: #2ecc71; font-weight: bold; margin-top: auto; }
+        
         @media (max-width: 768px) {
             .calendar-cell { min-height: 80px; padding: 5px; }
             .cal-profit { font-size: 12px; display: block; }
-            /* [新增] 手機版稍微縮小徽章避免擠壓 */
-            .lunar-badge { font-size: 10px; padding: 1px 4px; }
+            /* [修改] 手機版將徽章強迫換行到日期下方，確保排版整齊，並取消左側 margin */
+            .lunar-badge { display: block; margin-left: 0; margin-top: 4px; font-size: 10px; padding: 2px 0; text-align: center; border-radius: 4px; }
         }
     </style>
 </head>
@@ -299,7 +298,7 @@ class DatabaseRepository {
             const store = transaction.objectStore(this.storeRecords);
             const request = store.getAll();
             request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject('讀取歷史紀錄失败');
+            request.onerror = () => reject('讀取歷史紀錄失敗');
         });
     }
 }
@@ -513,10 +512,8 @@ class UIController {
                 cell.classList.add('today');
             }
 
-            // [新增] 計算農曆是否為十七
             let isLunar17 = false;
             try {
-                // Solar.fromYmd 的月份從 1 開始計算
                 const solar = Solar.fromYmd(this.currentCalendarYear, this.currentCalendarMonth + 1, day);
                 const lunar = solar.getLunar();
                 if (lunar.getDay() === 17) {
@@ -528,7 +525,7 @@ class UIController {
 
             const record = this.dailyRecordsList.find(r => r.dateString === cellDateString);
 
-            // [修改] 動態組合 HTML，若為農曆十七則加入橘色徽章標示
+            // [修改] 組合 HTML，移除了原有的 Flex 擠壓設定
             let innerHTML = `<div class="cal-date">
                                 <span>${day}</span>
                                 ${isLunar17 ? '<span class="lunar-badge">農曆十七</span>' : ''}
@@ -536,6 +533,7 @@ class UIController {
             
             if (record) {
                 innerHTML += `<div class="cal-profit">淨利: $${record.totalProfit.toLocaleString()}</div>`;
+                // 恢復原先使用 SweetAlert 顯示明細的邏輯
                 cell.onclick = () => this.showDailyDetails(record);
             }
 
